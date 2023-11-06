@@ -8,6 +8,7 @@ contract ProductIdentification{
     mapping(address => producer) public contractState;
 
     struct product{
+        bool isRegistered;
         string name;
         address producerAddress;
         int value;
@@ -20,10 +21,6 @@ contract ProductIdentification{
         product[] products;
     }
 
-    // mapping(address => producer) public producers;
-    address[] public producers;
-    product[] public products;
-
     constructor(){
         admin = payable(msg.sender);
         publicTax = 5;
@@ -35,13 +32,7 @@ contract ProductIdentification{
     }
 
     modifier onlyOneProducer(){
-        bool isProducer = false;
-        for(uint i = 0; i < producers.length; i++)
-            if(msg.sender == producers[i]){
-                isProducer = true;
-                break;
-            }
-        require(isProducer, "Only one producer can register a product.");
+        require(contractState[msg.sender].signedUp, "Only one producer can register a product.");
         _;
     }
 
@@ -52,31 +43,31 @@ contract ProductIdentification{
         emit publicTaxChanged(publicTax);
     }
 
-    event producerRegistered(address newProducer);
+    event producerRegistered(string producerName, address newProducer);
 
-    function registerProducer() public payable{
+    function registerProducer(string memory producerName) public payable{
         require(msg.value >= publicTax, "Insufficient funds for registering a producer.");
         contractState[msg.sender].signedUp = true;
+        contractState[msg.sender].name = producerName;
+        contractState[msg.sender].producerAddress = msg.sender; 
         admin.transfer(publicTax);
-        emit producerRegistered(msg.sender);
+        emit producerRegistered(producerName, msg.sender);
     }
 
     event productRegistered(address producer, string productName, int productValue);
 
     function registerProduct(producer memory theProducer, string memory productName, int productValue) public onlyOneProducer{
-        product memory structProduct = product(productName, theProducer.producerAddress, productValue);
-        products.push(structProduct);
+        product memory structProduct = product(true, productName, theProducer.producerAddress, productValue);
+        contractState[theProducer.producerAddress].products.push(structProduct);
         emit productRegistered(theProducer.producerAddress, productName, productValue);
     }
 
-    function getProducer(producer memory theProducer) public view returns (bool){
-        for(uint i = 0; i < producers.length; i++)
-            if(producers[i] == theProducer.producerAddress)
-                return true;
-        return false;
+    function getProducer(address producerAddress) public view returns (bool){
+        return contractState[producerAddress].signedUp;
     }
 
-    function getInfoProductById(uint id) public view returns (string memory, address, int){
-        return (products[id].name, products[id].producerAddress, products[id].value);
+    function getInfoProductById(address producerAddress, uint id) public view returns (string memory, int){
+        require(contractState[producerAddress].products[id].isRegistered, "Product not registered.");
+        return (contractState[producerAddress].products[id].name, contractState[producerAddress].products[id].value);
     }
 }
