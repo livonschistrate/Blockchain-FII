@@ -13,7 +13,6 @@ contract ProductDeposit{
         uint value;
         uint depositQuantity;
         uint shopQuantity;
-        store store;
     }
 
     struct store{
@@ -29,11 +28,9 @@ contract ProductDeposit{
     uint public currentVolume;
 
     ProductIdentification public contractIdentification;
-    ProductStore public contractStore;
 
     product[] public products;
-    store[] public stores;
-    mapping(address => store) public registeredStores;
+    mapping(address => store) stores;
 
     constructor(uint newTax, uint newVolume, address newContractIdentAddress){
         admin = payable(msg.sender);
@@ -49,7 +46,7 @@ contract ProductDeposit{
     }
 
     modifier maxVolumeReached(){
-        require(products.length == maxVolume, "Maximum volume of deposit is reached.");
+        require(currentVolume <= maxVolume, "Maximum volume of deposit is reached.");
         _;
     }
 
@@ -84,6 +81,7 @@ contract ProductDeposit{
         productToDeposit.value = value;
         productToDeposit.depositQuantity = units;
         
+        require(msg.sender == producerAddress, "Producer not authorized to deposit the selected product.");
         require(msg.value >= publicTax * units, "Insufficient funds for registering products.");
         require(currentVolume + units <= maxVolume, "Cannot add more units as it overcomes the maximum volume.");
 
@@ -94,39 +92,49 @@ contract ProductDeposit{
         emit depositProductRegistered(msg.sender, productToDeposit, units);
     }
 
-    event storeAuthorized(address producer, address store, string name, uint productId);
+    event storeAuthorized(address producer, address storeAddress, string name);
 
-    function registerStore(string memory name, address contractStoreAddress, uint productId) public onlyOneProducer{
+    function registerStore(string memory name, address storeAddress) public onlyOneProducer{
         store memory newShop;
         newShop.isRegistered = true;
         newShop.name = name;
         newShop.producerAddress = msg.sender;
-        newShop.storeAddress = contractStoreAddress;
-        products[productId].store = newShop;
-        products[productId].shopQuantity = 0;
-        stores.push(newShop);
-        emit storeAuthorized(msg.sender, contractStoreAddress, name, productId);
+        newShop.storeAddress = storeAddress;
+
+        stores[msg.sender] = newShop;
+        emit storeAuthorized(msg.sender, storeAddress, name);
     }
 
     event productsDeleted(address producer);
 
-    function deleteProduct(uint indexToDelete) private {
-        for(uint j = indexToDelete; j < products.length - 1; j++)
-            products[j] = products[j+1];
-        products.pop();
+    function addToDeposit(uint productId, uint units) public payable onlyOneProducer{
+        require((msg.sender == products[productId].producerAddress)  || stores[msg.sender].isRegistered,
+         "Producer is not authorized to add units to the product.");
+        require(products[productId].depositQuantity + units <= maxVolume, "Too many units to add.");
+        require(products.length > productId, "Index out of bounds.");
+        require(msg.value >= publicTax * units, "Insufficient funds for adding products.");
+        for(uint i = 0; i < products.length; i++){   
+            if(keccak256(abi.encodePacked(products[i].name)) == keccak256(abi.encodePacked(products[productId].name))
+            && products[i].value == products[productId].value){
+                products[i].depositQuantity += units;
+                currentVolume += units;
+                break;
+            }
+        }
+        payable(msg.sender).transfer(msg.value - publicTax * units);
+        admin.transfer(publicTax * units);
     }
 
-    function deleteFromDeposit(uint productId, uint units) public onlyOneProducer returns (bool){
-        require((msg.sender == products[productId].producerAddress) || (msg.sender == products[productId].store.storeAddress),
+    function withdrawFromDeposit(uint productId, uint units) public onlyOneProducer returns (bool){
+        require((msg.sender == products[productId].producerAddress) || stores[msg.sender].isRegistered,
          "Producer is not authorized to delete the product.");
-        require(products[productId].depositQuantity < units, "Too many units to delete.");
+        require(products[productId].depositQuantity >= units, "Too many units to withdraw.");
+        require(products.length > productId, "Index out of bounds.");
         for(uint i = 0; i < products.length; i++){   
             if(keccak256(abi.encodePacked(products[i].name)) == keccak256(abi.encodePacked(products[productId].name))
             && products[i].value == products[productId].value){
                 products[i].depositQuantity -= units;
                 currentVolume -= units;
-                if(products[i].depositQuantity == 0) 
-                    deleteProduct(productId);
                 break;
             }
         }
@@ -134,8 +142,9 @@ contract ProductDeposit{
         return true;
     }
 
-    function getProductById(uint id) public view returns (string memory, address, uint, uint, uint){
+    function getProductById(uint id) external view returns (string memory, address, uint, uint, uint){
         require(products[id].isRegistered, "Product not registered or not existent in store.");
+        require(products.length > id, "Index out of bounds.");
         return (products[id].name, products[id].producerAddress, products[id].value,
         products[id].depositQuantity, products[id].shopQuantity);
     }
