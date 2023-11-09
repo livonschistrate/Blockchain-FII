@@ -7,7 +7,8 @@ contract ProductIdentification{
         bool isRegistered;
         string name;
         address producerAddress;
-        int value;
+        uint value;
+        uint quantity;
     }
 
     struct producer{
@@ -20,6 +21,7 @@ contract ProductIdentification{
     address payable public admin;
     uint public publicTax;
     mapping(address => producer) public contractState;
+    product[] products;
 
     constructor(uint newTax){
         admin = payable(msg.sender);
@@ -47,32 +49,49 @@ contract ProductIdentification{
 
     function registerProducer(string memory producerName) public payable{
         require(msg.value >= publicTax, "Insufficient funds for registering a producer.");
-        
+
         contractState[msg.sender].signedUp = true;
         contractState[msg.sender].name = producerName;
-        contractState[msg.sender].producerAddress = msg.sender; 
+        contractState[msg.sender].producerAddress = msg.sender;
+
+        payable(msg.sender).transfer(msg.value - publicTax);
         admin.transfer(publicTax);
         emit producerRegistered(producerName, msg.sender);
     }
 
-    event productRegistered(address producer, string productName, int productValue);
+    event productRegistered(address producer, string productName, uint productValue);
 
-    function registerProduct(string memory productName, int productValue) public onlyOneProducer{
-        product memory newProduct = product(true, productName, msg.sender, productValue);
+    function registerProduct(string memory productName, uint productValue) public onlyOneProducer{
+        product memory newProduct;
+        newProduct.isRegistered = true;
+        newProduct.name = productName;
+        newProduct.producerAddress = msg.sender;
+        newProduct.value = productValue;
+
         contractState[msg.sender].products.push(newProduct);
+        products.push(newProduct);
         emit productRegistered(msg.sender, productName, productValue);
     }
 
-    function isProducerSignedIn(address producerAddress) public view returns (bool){
+    function isProducerSignedUp(address producerAddress) public view returns (bool){
         return contractState[producerAddress].signedUp;
     }
 
-    function getInfoProductById(uint id) public view returns (bool, string memory, address, int){
-        require(contractState[msg.sender].products[id].isRegistered, "Product not registered.");
-        return (contractState[msg.sender].products[id].isRegistered,
-        contractState[msg.sender].products[id].name,
-        contractState[msg.sender].products[id].producerAddress,
-        contractState[msg.sender].products[id].value);
+    function getProducerInfo(address producerAddress) public view returns (bool, string memory, address, product[] memory){
+        return (contractState[producerAddress].signedUp,
+        contractState[producerAddress].name,
+        contractState[producerAddress].producerAddress,
+        contractState[producerAddress].products);
     }
+
+    function getInfoProductById(uint id) public view returns (bool, string memory, address, uint){
+        require(products[id].isRegistered, "Product not registered.");
+        require(products.length > id, "Index out of bounds.");
+        return (products[id].isRegistered,
+        products[id].name,
+        products[id].producerAddress,
+        products[id].value);
+    }
+    
     
 }
