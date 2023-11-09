@@ -3,10 +3,6 @@
 pragma solidity >=0.8.0 <=0.8.21;
 
 contract ProductIdentification{
-    address payable public admin;
-    uint public publicTax;
-    mapping(address => producer) public contractState;
-
     struct product{
         bool isRegistered;
         string name;
@@ -20,10 +16,14 @@ contract ProductIdentification{
         address producerAddress;
         product[] products;
     }
+    
+    address payable public admin;
+    uint public publicTax;
+    mapping(address => producer) public contractState;
 
-    constructor(){
+    constructor(uint newTax){
         admin = payable(msg.sender);
-        publicTax = 5;
+        publicTax = newTax;
     }
 
     modifier onlyAdmin() {
@@ -47,6 +47,7 @@ contract ProductIdentification{
 
     function registerProducer(string memory producerName) public payable{
         require(msg.value >= publicTax, "Insufficient funds for registering a producer.");
+        
         contractState[msg.sender].signedUp = true;
         contractState[msg.sender].name = producerName;
         contractState[msg.sender].producerAddress = msg.sender; 
@@ -56,18 +57,22 @@ contract ProductIdentification{
 
     event productRegistered(address producer, string productName, int productValue);
 
-    function registerProduct(producer memory theProducer, string memory productName, int productValue) public onlyOneProducer{
-        product memory structProduct = product(true, productName, theProducer.producerAddress, productValue);
-        contractState[theProducer.producerAddress].products.push(structProduct);
-        emit productRegistered(theProducer.producerAddress, productName, productValue);
+    function registerProduct(string memory productName, int productValue) public onlyOneProducer{
+        product memory newProduct = product(true, productName, msg.sender, productValue);
+        contractState[msg.sender].products.push(newProduct);
+        emit productRegistered(msg.sender, productName, productValue);
     }
 
-    function getProducer(address producerAddress) public view returns (bool){
+    function isProducerSignedIn(address producerAddress) public view returns (bool){
         return contractState[producerAddress].signedUp;
     }
 
-    function getInfoProductById(address producerAddress, uint id) public view returns (string memory, int){
-        require(contractState[producerAddress].products[id].isRegistered, "Product not registered.");
-        return (contractState[producerAddress].products[id].name, contractState[producerAddress].products[id].value);
+    function getInfoProductById(uint id) public view returns (bool, string memory, address, int){
+        require(contractState[msg.sender].products[id].isRegistered, "Product not registered.");
+        return (contractState[msg.sender].products[id].isRegistered,
+        contractState[msg.sender].products[id].name,
+        contractState[msg.sender].products[id].producerAddress,
+        contractState[msg.sender].products[id].value);
     }
+    
 }
