@@ -13,21 +13,7 @@ contract ProductStore{
         uint value;
         uint depositQuantity;
         uint shopQuantity;
-        // store store;
     }
-
-    // struct producer{
-    //     string name;
-    //     address producerAddress;
-    //     product[] products;
-    // }
-
-    // struct store{
-    //     bool isRegistered;
-    //     string name;
-    //     address storeAddress;
-    //     product[] products;
-    // }
 
     address payable public admin;
     ProductDeposit public contractDeposit;
@@ -51,35 +37,28 @@ contract ProductStore{
         _;
     }
 
-    function setContractDeposit(ProductDeposit newDeposit) public{
-        contractDeposit = newDeposit;
+    event contractDepositAdded(address newDeposit);
+
+    function setContractDeposit(address newDepositAddress) public onlyAdmin{
+        contractDeposit = ProductDeposit(newDepositAddress);
+        emit contractDepositAdded(newDepositAddress);
     }
 
-    function setContractIdentification(ProductIdentification newIdentification) public{
-        contractIdentification = newIdentification;
+    event contractIdentificationAdded(address newIdentAddress);
+
+    function setContractIdentification(address newIdentAddress) public onlyAdmin{
+        contractIdentification = ProductIdentification(newIdentAddress);
+        emit contractIdentificationAdded(newIdentAddress);
     }
 
-    event storeRegistered(string name, address contractStoreAddress);
+    event newProductAdded(product newProduct, uint units);
 
-    // function registerStore(string memory name, address contractStoreAddress) public onlyAdmin{
-    //     store memory newShop;
-    //     newShop.isRegistered = true;
-    //     newShop.name = name;
-    //     newShop.storeAddress = contractStoreAddress;
-    //     stores.push(newShop);
-    //     emit storeRegistered(name, contractStoreAddress);
-    // }
-
-    // function getStore(uint id) public returns (bool, string memory, address){
-    //     return (stores[id].isRegistered, stores[id].name, stores[id].storeAddress);
-    // }
-
-    function addNewProductInStore(uint productId, uint units) public onlyAdmin{
+    function addNewProductInStore(uint productId, uint units) public onlyOneProducer{
         product memory newProduct;
         (string memory productName, address producerAddress, uint value,
          uint depositQuantity, uint shopQuantity) = contractDeposit.getProductById(productId);
 
-        require(contractDeposit.deleteFromDeposit(productId, units), "Product cannot be withdrawn from deposit.");
+        require(contractDeposit.withdrawFromDeposit(productId, units), "Product cannot be withdrawn from deposit.");
         newProduct.name = productName;
         newProduct.producerAddress = producerAddress;
         newProduct.value = value; 
@@ -87,16 +66,25 @@ contract ProductStore{
         newProduct.shopQuantity = shopQuantity + units;
 
         products.push(newProduct);
+        emit newProductAdded(newProduct, units);
     }
+
+    event priceValueUpdated(product thatProduct, uint newValue);
 
     function setPriceValue(uint productId, uint newValue) public onlyAdmin{
         products[productId].value = newValue;
+        emit priceValueUpdated(products[productId], newValue);
     }
 
-    function isProductAvailable(uint productId) public view returns (uint){
+    event productQuantityAvailable(product thatProduct);
+
+    function isProductAvailable(uint productId) public returns (uint){
         require(products[productId].shopQuantity > 0, "The product is currently not in the store.");
+        emit productQuantityAvailable(products[productId]);
         return products[productId].shopQuantity;
     }
+
+    event productPurchased(product thatProduct, uint units);
 
     function purchaseProduct(uint productId, uint units) public payable{
         require(isProductAvailable(productId) > 0, "The product is currently not available in the store.");
@@ -110,6 +98,7 @@ contract ProductStore{
         
         payable(msg.sender).transfer(msg.value - totalPrice);
         payable(products[productId].producerAddress).transfer(totalPrice / 2);
+        emit productPurchased(products[productId], units);
     }
 
 }
